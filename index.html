@@ -1,1 +1,40 @@
-<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Vincenzo & Francesca</title><link rel="stylesheet" href="style.css"></head><body><img class="banner" src="assets/banner-wide.png"><img class="colonna" src="assets/colonna.png"><main><section class="card"><h1>Vincenzo & Francesca 🌸</h1><h2>Aiutaci a raccogliere i ricordi più belli del nostro matrimonio</h2><p>Benvenuto nel nostro angolo dei ricordi.</p><p>Durante questa giornata speciale scatterai sicuramente foto, video e momenti che magari noi non riusciremo a vedere.</p><p>Caricali qui: finiranno direttamente nel nostro album privato del matrimonio. Non serve installare nessuna applicazione e non serve registrarsi.</p><p>Scegli foto o video dal telefono e regalaci il tuo punto di vista di questa giornata speciale ❤️</p><input id="files" type="file" multiple accept="image/*,video/*"><br><button onclick="uploadFiles()">Regala i tuoi ricordi 💕</button><div id="status"></div><p class="firma">Grazie per essere parte della nostra storia.<br>Con affetto,<br>Vincenzo & Francesca</p></section><section class="card"><h2>Gli ultimi ricordi condivisi 🌷</h2><p>Qui appariranno gli ultimi momenti caricati dagli invitati.</p><div id="gallery"></div></section></main><script src="script.js"></script></body></html>
+<!doctype html>
+<html lang="it">
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width,initial-scale=1">
+		<title>Vincenzo & Francesca</title>
+		<link rel="stylesheet" href="style.css">
+	</head>
+	<body>
+		<img class="banner" src="assets/banner-wide.png">
+		<img class="colonna" src="assets/colonna.png">
+		<main>
+			<section class="card">
+				<h1>Vincenzo & Francesca 🌸</h1>
+				<h2>Aiutaci a raccogliere i ricordi più belli del nostro matrimonio</h2>
+				<p>Benvenuto nel nostro angolo dei ricordi.</p>
+				<p>Durante questa giornata speciale scatterai sicuramente foto, video e momenti che magari noi non riusciremo a vedere.</p>
+				<p>Caricali qui: finiranno direttamente nel nostro album privato del matrimonio. Non serve installare nessuna applicazione e non serve registrarsi.</p>
+				<p>Scegli foto o video dal telefono e regalaci il tuo punto di vista di questa giornata speciale ❤️</p>
+
+				<div class="upload-control">
+					<input id="files" type="file" multiple accept="image/*,video/*" class="file-input">
+					<label for="files" class="choose-btn">Scegli foto o video</label>
+					<button class="upload-btn" onclick="uploadFiles()">Regala i tuoi ricordi 💕</button>
+				</div>
+
+				<div id="status"></div>
+
+				<p class="firma">Grazie per essere parte della nostra storia.<br>Con affetto,<br>Vincenzo & Francesca</p>
+			</section>
+
+			<section class="card">
+				<h2>Gli ultimi ricordi condivisi 🌷</h2>
+				<p>Qui appariranno gli ultimi momenti caricati dagli invitati.</p>
+				<div id="gallery"></div>
+			</section>
+		</main>
+		<script src="script.js"></script>
+	</body>
+</html>
