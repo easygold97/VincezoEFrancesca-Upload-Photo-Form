@@ -1,0 +1,11 @@
+name = "vincezofrancesca-upload-photo-form"
+main = "src/worker.js"
+compatibility_date = "2025-11-11"
+workers_dev = true
+account_id = "45c40600f8eab937db374aca89636930" # Inserisci il tuo account_id Cloudflare qui
+
+[build]
+command = ""
+
+[vars]
+# Se preferisci, puoi anche impostare DROPBOX_TOKEN come secret invece di una variabile d'ambiente.
