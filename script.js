@@ -1,4 +1,4 @@
-const API_BASE = document.documentElement.dataset.apiBase || "https://vincezofrancesca-upload-photo-form.45c40600f8eab937db374aca89636930.workers.dev";
+const API_BASE = document.documentElement.dataset.apiBase || "https://vincezofrancesca-upload-photo-form.bitter-math-a7a4.workers.dev";
 
 function apiUrl(path){
  return API_BASE.replace(/\/$/, "") + path;
