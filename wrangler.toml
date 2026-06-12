@@ -9,3 +9,6 @@ command = ""
 
 [vars]
 # Se preferisci, puoi anche impostare DROPBOX_TOKEN come secret invece di una variabile d'ambiente.
+[[kv_namespaces]]
+binding = "DROPBOX_KV"
+id = "b11d606f6df64d1d82e12be17c4fd310"

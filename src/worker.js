@@ -57,19 +57,129 @@ function handleOptions() {
   });
 }
 
-function getDropboxToken() {
-  return DROPBOX_TOKEN || null;
+async function getDropboxToken() {
+  try {
+    const kvToken = await getAccessTokenFromKV();
+    if (kvToken) return kvToken;
+  } catch (e) {
+    console.error('KV token check failed', e);
+  }
+
+  return typeof DROPBOX_TOKEN !== 'undefined' ? DROPBOX_TOKEN : null;
 }
 
-async function uploadFile(request) {
-  const token = getDropboxToken();
+async function getAccessTokenFromKV() {
+  if (typeof DROPBOX_KV === 'undefined') return null;
+
+  const raw = await DROPBOX_KV.get('dropbox_token');
+  if (raw) {
+    try {
+      const obj = JSON.parse(raw);
+      if (obj.token && obj.expires_at && Date.now() < obj.expires_at - 60000) {
+        return obj.token;
+      }
+    } catch (e) {
+      // ignore parse errors and refresh
+    }
+  }
+
+  return await refreshDropboxToken();
+}
+
+function clearCachedToken() {
+  if (typeof DROPBOX_KV === 'undefined') return Promise.resolve();
+  return DROPBOX_KV.delete('dropbox_token');
+}
+
+async function refreshDropboxToken() {
+  const refreshToken = typeof DROPBOX_REFRESH_TOKEN !== 'undefined' ? DROPBOX_REFRESH_TOKEN : null;
+  const appKey = typeof DROPBOX_APP_KEY !== 'undefined' ? DROPBOX_APP_KEY : null;
+  const appSecret = typeof DROPBOX_APP_SECRET !== 'undefined' ? DROPBOX_APP_SECRET : null;
+  if (!refreshToken || !appKey || !appSecret) return null;
+
+  const body = new URLSearchParams();
+  body.append('grant_type', 'refresh_token');
+  body.append('refresh_token', refreshToken);
+
+  const basic = btoa(`${appKey}:${appSecret}`);
+  const res = await fetch('https://api.dropbox.com/oauth2/token', {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${basic}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: body.toString(),
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    console.error('Failed to refresh Dropbox token', res.status, text);
+    return null;
+  }
+
+  const data = await res.json();
+  const token = data.access_token;
+  const expiresIn = data.expires_in || 14400;
+  const expiresAt = Date.now() + expiresIn * 1000;
+
+  if (typeof DROPBOX_KV !== 'undefined') {
+    try {
+      await DROPBOX_KV.put('dropbox_token', JSON.stringify({ token, expires_at: expiresAt }), {
+        expiration: Math.floor(expiresAt / 1000),
+      });
+    } catch (e) {
+      console.error('Failed to write token to KV', e);
+    }
+  }
+
+  return token;
+}
+
+async function fetchDropboxApi(url, init) {
+  let token = await getDropboxToken();
   if (!token) {
-    return new Response(JSON.stringify({ error: "Dropbox token not configured" }), {
+    return new Response(JSON.stringify({ error: 'Dropbox token not configured' }), {
       status: 500,
       headers: corsHeaders,
     });
   }
 
+  const headers = {
+    ...(init.headers || {}),
+    Authorization: `Bearer ${token}`,
+  };
+  let response = await fetch(url, { ...init, headers });
+  const text = await response.text();
+
+  if (response.status === 401) {
+    let body;
+    try {
+      body = JSON.parse(text);
+    } catch (e) {
+      body = null;
+    }
+    const invalid = body?.error?.['.tag'] === 'invalid_access_token' || body?.error_summary?.includes('invalid_access_token');
+    if (invalid) {
+      await clearCachedToken();
+      const refreshed = await refreshDropboxToken();
+      if (refreshed) {
+        const retryHeaders = {
+          ...(init.headers || {}),
+          Authorization: `Bearer ${refreshed}`,
+        };
+        response = await fetch(url, { ...init, headers: retryHeaders });
+        return response;
+      }
+    }
+  }
+
+  return new Response(text, {
+    status: response.status,
+    headers: response.headers,
+  });
+}
+
+async function uploadFile(request) {
   const formData = await request.formData();
   const file = formData.get("file");
   if (!file || typeof file === "string") {
@@ -80,10 +190,9 @@ async function uploadFile(request) {
   }
 
   const uploadPath = `${CARTELLA}/${Date.now()}_${file.name}`;
-  const response = await fetch("https://content.dropboxapi.com/2/files/upload", {
+  const response = await fetchDropboxApi("https://content.dropboxapi.com/2/files/upload", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${token}`,
       "Dropbox-API-Arg": JSON.stringify({
         path: uploadPath,
         mode: "add",
@@ -105,18 +214,9 @@ async function uploadFile(request) {
 }
 
 async function getRecentFiles() {
-  const token = getDropboxToken();
-  if (!token) {
-    return new Response(JSON.stringify({ error: "Dropbox token not configured" }), {
-      status: 500,
-      headers: corsHeaders,
-    });
-  }
-
-  const listRes = await fetch("https://api.dropboxapi.com/2/files/list_folder", {
+  const listRes = await fetchDropboxApi("https://api.dropboxapi.com/2/files/list_folder", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ path: CARTELLA }),
@@ -142,10 +242,9 @@ async function getRecentFiles() {
   const files = await Promise.all(
     entries.map(async entry => {
       const path = entry.path_lower || entry.path_display;
-      const tempRes = await fetch("https://api.dropboxapi.com/2/files/get_temporary_link", {
+      const tempRes = await fetchDropboxApi("https://api.dropboxapi.com/2/files/get_temporary_link", {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ path }),
