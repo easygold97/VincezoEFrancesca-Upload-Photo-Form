@@ -57,15 +57,33 @@ function handleOptions() {
   });
 }
 
+function hasDropboxRefreshConfig() {
+  return typeof DROPBOX_REFRESH_TOKEN !== 'undefined'
+    && typeof DROPBOX_APP_KEY !== 'undefined'
+    && typeof DROPBOX_APP_SECRET !== 'undefined';
+}
+
 async function getDropboxToken() {
   try {
     const kvToken = await getAccessTokenFromKV();
-    if (kvToken) return kvToken;
+    if (kvToken) {
+      console.log('Using Dropbox token from KV');
+      return kvToken;
+    }
   } catch (e) {
     console.error('KV token check failed', e);
   }
 
-  return typeof DROPBOX_TOKEN !== 'undefined' ? DROPBOX_TOKEN : null;
+  if (hasDropboxRefreshConfig()) {
+    console.log('Dropbox refresh flow configured; skipping static token fallback');
+    return null;
+  }
+
+  const fallbackToken = typeof DROPBOX_TOKEN !== 'undefined' ? DROPBOX_TOKEN : null;
+  if (fallbackToken) {
+    console.log('Using static DROPBOX_TOKEN fallback');
+  }
+  return fallbackToken;
 }
 
 async function getAccessTokenFromKV() {
@@ -95,7 +113,10 @@ async function refreshDropboxToken() {
   const refreshToken = typeof DROPBOX_REFRESH_TOKEN !== 'undefined' ? DROPBOX_REFRESH_TOKEN : null;
   const appKey = typeof DROPBOX_APP_KEY !== 'undefined' ? DROPBOX_APP_KEY : null;
   const appSecret = typeof DROPBOX_APP_SECRET !== 'undefined' ? DROPBOX_APP_SECRET : null;
-  if (!refreshToken || !appKey || !appSecret) return null;
+  if (!refreshToken || !appKey || !appSecret) {
+    console.error('Dropbox refresh token flow not configured: missing DROPBOX_REFRESH_TOKEN, DROPBOX_APP_KEY or DROPBOX_APP_SECRET');
+    return null;
+  }
 
   const body = new URLSearchParams();
   body.append('grant_type', 'refresh_token');
@@ -132,13 +153,14 @@ async function refreshDropboxToken() {
     }
   }
 
+  console.log('Dropbox access token refreshed successfully; expires_in=', expiresIn);
   return token;
 }
 
 async function fetchDropboxApi(url, init) {
   let token = await getDropboxToken();
   if (!token) {
-    return new Response(JSON.stringify({ error: 'Dropbox token not configured' }), {
+    return new Response(JSON.stringify({ error: 'Dropbox token not configured or refresh failed' }), {
       status: 500,
       headers: corsHeaders,
     });
@@ -148,7 +170,8 @@ async function fetchDropboxApi(url, init) {
     ...(init.headers || {}),
     Authorization: `Bearer ${token}`,
   };
-  let response = await fetch(url, { ...init, headers });
+  const request = new Request(url, { ...init, headers });
+  let response = await fetch(request.clone());
   const text = await response.text();
 
   if (response.status === 401) {
@@ -158,8 +181,12 @@ async function fetchDropboxApi(url, init) {
     } catch (e) {
       body = null;
     }
-    const invalid = body?.error?.['.tag'] === 'invalid_access_token' || body?.error_summary?.includes('invalid_access_token');
+    const invalid = body?.error?.['.tag'] === 'invalid_access_token'
+      || body?.error?.['.tag'] === 'expired_access_token'
+      || body?.error_summary?.includes('invalid_access_token')
+      || body?.error_summary?.includes('expired_access_token');
     if (invalid) {
+      console.error('Dropbox token invalid or expired', body);
       await clearCachedToken();
       const refreshed = await refreshDropboxToken();
       if (refreshed) {
@@ -167,9 +194,11 @@ async function fetchDropboxApi(url, init) {
           ...(init.headers || {}),
           Authorization: `Bearer ${refreshed}`,
         };
-        response = await fetch(url, { ...init, headers: retryHeaders });
+        const retryRequest = new Request(url, { ...init, headers: retryHeaders });
+        response = await fetch(retryRequest.clone());
         return response;
       }
+      console.error('Dropbox refresh failed or not configured');
     }
   }
 
